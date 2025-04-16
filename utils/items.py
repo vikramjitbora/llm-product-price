@@ -18,7 +18,7 @@ class Item:
     Attributes:
         title (str): Title of the product.
         price (float): Price of the product.
-        category (str): Category the product belongs to (currently unused).
+        category (str): Category the product belongs to.
         token_count (int): Number of tokens in the generated prompt.
         details (Optional[str]): Additional product details.
         prompt (Optional[str]): Prompt generated for model training.
