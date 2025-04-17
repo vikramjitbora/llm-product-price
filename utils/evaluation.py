@@ -1,77 +1,91 @@
 import math
 import matplotlib.pyplot as plt
 
+# Color categories for plotting
+COLOR_MAP = {"red": "red", "orange": "orange", "green": "green"}
+
 class ModelEvaluator:
     """
-    Evaluates a regression model's predictions on a dataset, computes errors, 
-    and visualizes predictions vs. ground truth.
+    Evaluates a regression model on a dataset and visualizes performance using a color-coded scatter plot.
     """
 
-    def __init__(self, predictor_fn, dataset, title=None, sample_size=250):
+    def __init__(self, predictor, data, title=None, size=250):
         """
-        Initializes the evaluator.
+        Initialize the evaluator.
 
         Args:
-            predictor_fn (callable): Function that takes a datapoint and returns a predicted value.
-            dataset (list): Collection of datapoints with at least `.price` and `.title` attributes.
-            title (str, optional): Custom title for charts and reports.
-            sample_size (int): Number of datapoints to evaluate.
+            predictor: A function that takes a data point and returns a price prediction.
+            data: A list of data points with actual prices and optional titles.
+            title: Optional title for the plot.
+            size: Number of data points to evaluate.
         """
-        self.predictor_fn = predictor_fn
-        self.dataset = dataset
-        self.title = title or predictor_fn.__name__.replace("_", " ").title()
-        self.sample_size = min(sample_size, len(dataset))
+        self.predictor = predictor
+        self.data = data
+        self.title = title or predictor.__name__.replace("_", " ").title()
+        self.size = size
 
-        # Internal storage for evaluation metrics
-        self.y_preds = []
-        self.y_trues = []
-        self.abs_errors = []
+        # Evaluation metrics
+        self.y_pred = []
+        self.y_true = []
+        self.errors = []
         self.squared_log_errors = []
-        self.point_colors = []
+        self.colors = []
 
-    def _get_color(self, error, y_true):
+    def _assign_color(self, error, actual):
         """
-        Assigns a color label based on the prediction error.
+        Determine color based on absolute and relative error.
+
+        Args:
+            error: Absolute prediction error.
+            actual: Actual price.
 
         Returns:
-            str: Color name ('green', 'orange', or 'red').
+            A string representing the color category.
         """
-        if error < 40 or error / y_true < 0.2:
+        if error < 40 or error / actual < 0.2:
             return "green"
-        elif error < 80 or error / y_true < 0.4:
+        elif error < 80 or error / actual < 0.4:
             return "orange"
         else:
             return "red"
 
-    def _evaluate_point(self, idx):
+    def _evaluate_single_point(self, index):
         """
-        Evaluates the prediction for a single datapoint and stores metrics.
-        """
-        datapoint = self.dataset[idx]
-        y_true = datapoint.price
-        y_pred = self.predictor_fn(datapoint)
+        Evaluate model performance on a single data point.
 
-        abs_error = abs(y_pred - y_true)
-        log_error = math.log(y_true + 1) - math.log(y_pred + 1)
+        Args:
+            index: Index of the data point in the dataset.
+        """
+        datapoint = self.data[index]
+        prediction = self.predictor(datapoint)
+        actual = datapoint.price
+        error = abs(prediction - actual)
+        log_error = math.log(actual + 1) - math.log(prediction + 1)
         sle = log_error ** 2
-        color = self._get_color(abs_error, y_true)
+        color = self._assign_color(error, actual)
 
-        self.y_preds.append(y_pred)
-        self.y_trues.append(y_true)
-        self.abs_errors.append(abs_error)
+        self.y_pred.append(prediction)
+        self.y_true.append(actual)
+        self.errors.append(error)
         self.squared_log_errors.append(sle)
-        self.point_colors.append(color)
+        self.colors.append(color)
 
-    def _plot_predictions(self, title):
+    def _plot_results(self, title):
         """
-        Plots predicted vs. actual values with error-based color coding.
-        """
-        max_val = max(max(self.y_trues), max(self.y_preds))
+        Generate a scatter plot of predicted vs actual values.
 
-        plt.figure(figsize=(12, 8))
-        plt.plot([0, max_val], [0, max_val], color='deepskyblue', lw=2, alpha=0.6, label='Ideal Fit')
-        plt.scatter(self.y_trues, self.y_preds, s=10, c=self.point_colors, alpha=0.6)
+        Args:
+            title: Title of the plot.
+        """
+        plt.figure(figsize=(8, 6))
+        max_val = max(max(self.y_true), max(self.y_pred))
         
+        # Ideal prediction line (y = x)
+        plt.plot([0, max_val], [0, max_val], color='deepskyblue', lw=2, alpha=0.6, label='Ideal Prediction')
+
+        # Scatter plot
+        plt.scatter(self.y_true, self.y_pred, s=3, c=self.colors)
+
         plt.xlabel('Actual Price')
         plt.ylabel('Predicted Price')
         plt.title(title)
@@ -81,38 +95,33 @@ class ModelEvaluator:
         plt.grid(True)
         plt.show()
 
-    def _generate_report(self):
+    def _summarize_results(self):
         """
-        Calculates and visualizes overall evaluation metrics.
+        Compute overall error metrics and display the evaluation plot.
         """
-        avg_error = sum(self.abs_errors) / self.sample_size
-        rmsle = math.sqrt(sum(self.squared_log_errors) / self.sample_size)
-        hit_rate = sum(1 for color in self.point_colors if color == "green") / self.sample_size
+        average_error = sum(self.errors) / self.size
+        rmsle = math.sqrt(sum(self.squared_log_errors) / self.size)
+        green_hits = sum(1 for color in self.colors if color == "green")
+        hit_rate = green_hits / self.size * 100
 
-        summary_title = (
-            f"{self.title} | Avg Error: ${avg_error:,.2f} | "
-            f"RMSLE: {rmsle:,.2f} | Hit Rate: {hit_rate * 100:.1f}%"
-        )
-        self._plot_predictions(summary_title)
+        plot_title = f"{self.title} | Avg Error = ${average_error:,.2f} | RMSLE = {rmsle:.2f} | Hit Rate = {hit_rate:.1f}%"
+        self._plot_results(plot_title)
 
     def run(self):
         """
-        Runs the evaluation over the sample size.
+        Evaluate the model across all data points and visualize the results.
         """
-        for idx in range(self.sample_size):
-            self._evaluate_point(idx)
-        self._generate_report()
+        for i in range(self.size):
+            self._evaluate_single_point(i)
+        self._summarize_results()
 
     @classmethod
-    def evaluate(cls, predictor_fn, dataset, title=None, sample_size=250):
+    def evaluate(cls, predictor, data):
         """
-        Convenience method to evaluate without explicitly instantiating.
+        Run a full evaluation on a given predictor and dataset.
 
         Args:
-            predictor_fn (callable): The model prediction function.
-            dataset (list): List of datapoints.
-            title (str): Optional title for visualization.
-            sample_size (int): How many samples to evaluate.
+            predictor: The prediction function.
+            data: The dataset to evaluate.
         """
-        evaluator = cls(predictor_fn, dataset, title=title, sample_size=sample_size)
-        evaluator.run()
+        cls(predictor, data).run()
